@@ -1,0 +1,1 @@
+.pyenv\Scripts\activate && python run.py
