@@ -6,7 +6,7 @@ import os
 import config as cnf
 from pdf_utils import get_pdf_paths, get_ploter_page, save_pdf, get_pdf_page
 from watermarks import add_watermarks
-from devide_page import get_small_pages
+from devide_page import get_small_pages, get_small_pages_bordered
 
 import subprocess
 
@@ -95,8 +95,8 @@ def main(options, get_increaser, gui):
             gui.update()
             return gui.is_want_stop
 
-        pages_a4 = get_small_pages(
-                base_page, cnf.PAGE_SIZE, cnf.BORDER, cnf.CUT_SPAN,
+        pages_a4 = get_small_pages_bordered(
+                base_page, cnf.PAGE_SIZE, cnf.CUT_SPAN,
                 cnf.CUT_DUSH, cnf.CUT_WEIGHT, callback)
         if pages_a4:
             if options['title_path']:
