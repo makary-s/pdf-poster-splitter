@@ -71,7 +71,7 @@ def get_ploter_page(page, width, min_height, debug_path=None, debug_targetpath=N
         if (debug_path):
             st = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
             error_message = st + ' > Страница слишком большая! > ' + debug_path
-            print error_message
+            print(error_message)
             logpath = os.path.join(debug_targetpath, debug_filename) + '.txt'
             with open(logpath, 'a') as file:
                 file.write(error_message + '\n')

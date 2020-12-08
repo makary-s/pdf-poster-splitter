@@ -10,14 +10,9 @@ CUT_SPAN = 1
 CUT_WEIGHT = 2
 CUT_DUSH = [20, 12]
 
-
 LOGO_WIDTH = 30
 LOGO_GAP = 3
 LOGO_DEG = 30
-
-
-
-#===============
 
 BIG_PAGE_SIZE = [val * cm for val in BIG_PAGE_SIZE]
 BORDER *= cm

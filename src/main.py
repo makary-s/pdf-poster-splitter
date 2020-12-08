@@ -31,31 +31,32 @@ class ShellLogger():
     def join_text(self):
         return self._format_str.format(**self._texts)
 
-def main(options, get_increaser, gui):
+def main(options, gui):
     options = options.copy()
-    print options
+
     if not os.path.exists(options['base_path']):
-        gui.show_popup('Директории %s не существует!' % options['base_path'])
+        gui.show_popup('Директории "Из папки" (%s) не существует!' % options['base_path'])
         return 
     if not os.path.exists(options['target_path']):
-        gui.show_popup('Директории %s не существует!' % options['target_path'])
+        gui.show_popup('Директории "В папку" (%s) не существует!' % options['target_path'])
         return
         
-    if options['logo_path'].isspace():
+    if not options['logo_path'].strip():
             options['logo_path'] = None
     elif not os.path.exists(options['logo_path']):
-        gui.show_popup('Директории %s не существует!' % options['logo_path'])
+        gui.show_popup('Директории "Логотип" (%s) не существует!' % options['logo_path'])
         return
     elif not os.path.isfile(options['logo_path']):
-        gui.show_popup('%s не является файлом!' % options['logo_path'])
+        gui.show_popup('Логотип (%s) не является файлом!' % options['logo_path'])
         return
-    if options['title_path'].isspace():
+        
+    if not options['title_path'].strip():
         options['title_path'] = None
     elif not os.path.exists(options['title_path']):
-        gui.show_popup('Директории %s не существует!' % options['title_path'])
+        gui.show_popup('Директории "Титульный лист" (%s) не существует!' % options['title_path'])
         return
     elif not os.path.isfile(options['title_path']):
-        gui.show_popup('%s не является файлом!' % options['title_path'])
+        gui.show_popup('Титульный лист (%s) не является файлом!' % options['title_path'])
         return
 
     shell_logger = ShellLogger("{i}/{len} : {pi}/{plen} : {path}")
@@ -72,8 +73,7 @@ def main(options, get_increaser, gui):
             }
             pdfs.append(pdf)
 
-    increase_progress = get_increaser(len(pdfs))
-
+    gui.set_file_progress(0, len(pdfs))
     for pdf_i, pdf in enumerate(pdfs):
         shell_logger.assign({
             'i': pdf_i + 1,
@@ -89,26 +89,29 @@ def main(options, get_increaser, gui):
             gui.update()
 
         ###
-        def callback(p, i, len):
-            shell_logger.assign({'pi': i, 'plen': len}),
-            shell_logger.log(),
+
+        def on_process(p, i, imax):
+            shell_logger.assign({'pi': i, 'plen': imax})
+            shell_logger.log()
+            gui.set_page_progress(i + 1, imax)
             gui.update()
-            return gui.is_want_stop
+            return gui.check_stop()
 
         pages_a4 = get_small_pages_bordered(
                 base_page, cnf.PAGE_SIZE, cnf.CUT_SPAN,
-                cnf.CUT_DUSH, cnf.CUT_WEIGHT, callback)
+                cnf.CUT_DUSH, cnf.CUT_WEIGHT, on_process)
         if pages_a4:
             if options['title_path']:
                 pages_a4.insertPage(get_pdf_page(options['title_path']), 0)
             save_pdf(pages_a4, pdf['name'] + '_A4.pdf', pdf['target_path'])
         
         ###
-        if gui.is_want_stop:
+        if gui.check_stop():
             gui.show_popup('Остановлено!')
-            increase_progress(False)
+            gui.set_page_progress(0, 0)
+            gui.set_file_progress(0, 0)
             return
-        increase_progress()
+        gui.set_file_progress(pdf_i + 1, len(pdfs))
 
     gui.show_popup('Задача завершена!')
 

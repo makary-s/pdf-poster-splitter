@@ -1,29 +1,37 @@
 # -*- coding: utf-8 -*-
 
-import Tkinter as tk
-import tkFileDialog as tkfd
-import ttk
-import pickle, os
+import tkinter as tk
+from tkinter import filedialog as tkfd
+from tkinter import ttk
+import pickle, os, datetime, traceback
+from importlib import reload
 
 from main import main
 
 import sys
 reload(sys)
-sys.setdefaultencoding('utf8')
 
+TEMP_PATH = '.temp'
 PICKLE_PATH = 'data.pickle'
 MAIN_SCRIPT = main
+global EXIT_FLAG
+EXIT_FLAG = False
+
 options = {
     'base_path': '',
     'target_path': '',
     'logo_path': '',
     'title_path': ''}
 
-if os.path.isfile(PICKLE_PATH):
-    with open(PICKLE_PATH, 'rb') as f:
+if not os.path.exists(TEMP_PATH):
+    os.makedirs(TEMP_PATH)
+
+pickle_path = os.path.join(TEMP_PATH, PICKLE_PATH)
+if os.path.isfile(pickle_path):
+    with open(pickle_path, 'rb') as f:
         options = pickle.load(f)
 else:
-    with open(PICKLE_PATH, 'wb') as f:
+    with open(pickle_path, 'wb') as f:
         pickle.dump(options, f)
 
 class TkApp(tk.Tk, object):
@@ -42,7 +50,9 @@ class TkApp(tk.Tk, object):
         self.frames[name].tkraise()
 
     def on_exit(self):
-        with open(PICKLE_PATH, 'wb') as f:
+        global EXIT_FLAG
+        EXIT_FLAG = True
+        with open(pickle_path, 'wb') as f:
             pickle.dump(options, f)
         self.destroy()
 
@@ -64,12 +74,11 @@ class TkApp(tk.Tk, object):
 #         button_tab_slice = tk.Button(self, text='Вотермарки')
 #         button_tab_slice.pack(side='left')
     
-
-
-
 def create_callback(option, var=None):
-    def wrapper(_var=var):
-        options[option] = os.path.normpath(_var.get())
+    def wrapper(_var):
+        res_var = _var.get()
+        options[option] = os.path.normpath(res_var) if res_var else ''
+
         return True
     return wrapper
 
@@ -91,19 +100,31 @@ class MainFrame(tk.Frame, object):
 
 
         run_frame = tk.Frame(self)
-        progressbar = myProgressbar(run_frame)
-        progressbar.pack(side='left', fill='both', expand=True)
+        progressbar_f = myProgressbar(run_frame, 'fp')
+        progressbar_f.pack(side='left', fill='both', expand=True)
+        progressbar_p = myProgressbar(run_frame, 'pp')
+        progressbar_p.pack(side='left', fill='both', expand=True)
 
         button_run_text = tk.StringVar()
         button_run_text.set('Начать')
         button_run = tk.Button(
             run_frame,
             textvariable=button_run_text,
-            command=lambda: self.handle_run(button_run_text, progressbar))
+            command=lambda: self.handle_run(button_run_text, progressbar_f, progressbar_p))
         button_run.pack(side='left')
         run_frame.pack(fill='both')
-
-    def handle_run(self, button_text, progressbar):
+        
+        
+    def create_api(self, progressbar_f, progressbar_p):
+        api = lambda: None
+        api.update = self.update
+        api.check_stop = lambda: self.is_want_stop
+        api.show_popup = self.show_popup
+        api.set_file_progress = progressbar_f.set_progress
+        api.set_page_progress = progressbar_p.set_progress
+        return api
+        
+    def handle_run(self, button_text, progressbar_f, progressbar_p):
         # loose entery focuse to save path
         self.focus()
         self.update()
@@ -111,10 +132,18 @@ class MainFrame(tk.Frame, object):
         if not self.is_run:
             button_text.set('Отменить')
             self.is_run = True
-            MAIN_SCRIPT(
-                    options,
-                    progressbar.get_increaser,
-                    self)
+            try:
+                MAIN_SCRIPT(
+                        options,
+                        self.create_api(progressbar_f, progressbar_p))
+            except Exception as e:
+                global EXIT_FLAG
+                if not EXIT_FLAG:
+                    print(e)
+                    with open('error_log.txt', 'a') as f:
+                        log = '\n' + str(datetime.datetime.now()) + '\n' +  str(traceback.format_exc()) + '\n' + str(e) + '\n'
+                        f.write(log)
+                    self.show_popup('Ошибка!')
             button_text.set('Начать')
             self.is_run = False
             self.is_want_stop = False
@@ -139,48 +168,34 @@ class MainFrame(tk.Frame, object):
         top.geometry("+%d+%d" % (x + dx, y + dy))
 
 class myProgressbar(ttk.Progressbar, object):
-    def __init__(self, parent, *args, **kwargs):
-        super(myProgressbar, self).__init__(parent)
+    def __init__(self, parent, name="LabeledProgressbar"):
+        super(myProgressbar, self).__init__(parent,
+            orient="horizontal",
+            mode="determinate")
         
+        self.name = name
+        
+        self.style = ttk.Style(parent)
+        self.style.layout(self.name,
+         [(self.name + '.trough',
+           {'children': [(self.name + '.pbar',
+                          {'side': 'left', 'sticky': 'ns'}),
+                         (self.name + ".label",
+                          {"sticky": ""})],
+           'sticky': 'nswe'})])
+        self['style'] = self.name
+        self["value"] = 0
+        self["maximum"] = 0
+
         self.parent = parent
-        self.variable = tk.DoubleVar(self)
-        self.max_val = 0
+        self.set_progress(0, 0)
 
-        self.style = ttk.Style(self)
-        self.style.layout('text.Horizontal.TProgressbar', 
-                    [('Horizontal.Progressbar.trough',
-                        {'children': [('Horizontal.Progressbar.pbar',
-                                      {'side': 'left', 'sticky': 'ns'})],
-                         'sticky': 'nswe'}), 
-                     ('Horizontal.Progressbar.label', {'sticky': ''})])
-        self.style.configure('text.Horizontal.TProgressbar', text='')
+    def set_progress(self, i, imax):
+        self["value"] = i
+        self["maximum"] = imax
+        self.style.configure(self.name, text="{}/{}        ".format(i, imax))
 
-    
-        self.configure(
-            style='text.Horizontal.TProgressbar',
-            mode='determinate',
-            variable=self.variable)
 
-    def increase(self):
-        self.step() 
-        self.style.configure('text.Horizontal.TProgressbar', 
-                        text='{:g}/{:g}'.format(self.variable.get(), self.max_val))
-
-    def get_increaser(self, max_val):
-        self.max_val = max_val
-        self.config(maximum=max_val)
-        def increase(mode=True):
-            if mode:
-                self.increase()
-            else:
-                self.reset()
-        return increase
-
-    def reset(self):
-        self.max_val = 0
-        self.config(maximum=0)
-        self.variable.set(0)
-        self.style.configure('text.Horizontal.TProgressbar', text='')
 
 
 def create_path_getter(atype, parent, entery, var):

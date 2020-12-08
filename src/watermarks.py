@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from copy import copy
 from reportlab.pdfgen import canvas
 import io, PIL, math
 from pdf_utils import get_page_size
