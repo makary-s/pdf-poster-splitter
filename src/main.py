@@ -33,6 +33,8 @@ class ShellLogger():
 
 def main(options, gui):
     options = options.copy()
+    page_size_name = options['page_size']
+    page_size = cnf.PAGE_SIZES[page_size_name]
 
     if not os.path.exists(options['base_path']):
         gui.show_popup('Директории "Из папки" (%s) не существует!' % options['base_path'])
@@ -98,12 +100,12 @@ def main(options, gui):
             return gui.check_stop()
 
         pages_a4 = get_small_pages_bordered(
-                base_page, cnf.PAGE_SIZE, cnf.CUT_SPAN,
+                base_page, page_size, cnf.CUT_SPAN,
                 cnf.CUT_DUSH, cnf.CUT_WEIGHT, on_process)
         if pages_a4:
             if options['title_path']:
                 pages_a4.insertPage(get_pdf_page(options['title_path']), 0)
-            save_pdf(pages_a4, pdf['name'] + '_A4.pdf', pdf['target_path'])
+            save_pdf(pages_a4, pdf['name'] + '_' + page_size_name + '.pdf', pdf['target_path'])
         
         ###
         if gui.check_stop():

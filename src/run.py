@@ -5,7 +5,7 @@ from tkinter import filedialog as tkfd
 from tkinter import ttk
 import pickle, os, datetime, traceback
 from importlib import reload
-
+from config import PAGE_SIZES
 from main import main
 
 import sys
@@ -21,7 +21,8 @@ options = {
     'base_path': '',
     'target_path': '',
     'logo_path': '',
-    'title_path': ''}
+    'title_path': '',
+    'page_size': ''}
 
 if not os.path.exists(TEMP_PATH):
     os.makedirs(TEMP_PATH)
@@ -43,7 +44,9 @@ class TkApp(tk.Tk, object):
 
         self.frames = {}
         for frame in [MainFrame]:
-            self.frames[frame.__name__] = frame = frame(self)
+            self.frames[
+                frame.__name__ # type: ignore
+            ] = frame = frame(self) 
             frame.grid(row=2, column=0, sticky="nsew")
 
     def show_tab(self, name):
@@ -56,6 +59,7 @@ class TkApp(tk.Tk, object):
             pickle.dump(options, f)
         self.destroy()
 
+   
 
 # class TabFrame(tk.Frame):
 #     def __init__(self, parent):
@@ -73,14 +77,12 @@ class TkApp(tk.Tk, object):
 
 #         button_tab_slice = tk.Button(self, text='Вотермарки')
 #         button_tab_slice.pack(side='left')
-    
-def create_callback(option, var=None):
-    def wrapper(_var):
-        res_var = _var.get()
-        options[option] = os.path.normpath(res_var) if res_var else ''
 
-        return True
-    return wrapper
+def saveOption(option_name: str, var: tk.Variable, prepare = lambda x: x):
+    res_var = var.get()
+    options[option_name] = prepare(res_var)
+
+    return True
 
 class MainFrame(tk.Frame, object):
     def __init__(self, parent):
@@ -92,10 +94,11 @@ class MainFrame(tk.Frame, object):
         paths_frame = tk.Frame(self)
         paths_frame.grid_columnconfigure(1, weight=1)
 
-        place_entery_row(paths_frame, 1, 'Из папки', 'folder', create_callback('base_path'), options['base_path'])
-        place_entery_row(paths_frame, 2, 'В папку', 'folder', create_callback('target_path'), options['target_path'])
-        place_entery_row(paths_frame, 3, 'Логотип*', 'png', create_callback('logo_path'), options['logo_path'])
-        place_entery_row(paths_frame, 4, 'Титульный лист*', 'pdf', create_callback('title_path'), options['title_path'])
+        place_entery_row(paths_frame, 1, 'Из папки', 'folder', 'base_path', options)
+        place_entery_row(paths_frame, 2, 'В папку', 'folder', 'target_path', options)
+        place_select_row(paths_frame, 3, 'Формат бумаги', PAGE_SIZES, 'page_size', options)
+        place_entery_row(paths_frame, 4, 'Логотип*', 'png', 'logo_path', options)
+        place_entery_row(paths_frame, 5, 'Титульный лист*', 'pdf', 'title_path', options)
         paths_frame.pack(fill='x', expand=True)
 
 
@@ -153,7 +156,7 @@ class MainFrame(tk.Frame, object):
     def show_popup(self, about_message, width=200):
         top  = tk.Toplevel()
         top.title("Внимание")
-        top.resizable(0, 0)
+        top.resizable(width=None, height=None)
         
         msg = tk.Message(top, text=about_message, width=width)
         msg.pack(fill='both', expand=True)
@@ -195,18 +198,17 @@ class myProgressbar(ttk.Progressbar, object):
         self["maximum"] = imax
         self.style.configure(self.name, text="{}/{}        ".format(i, imax))
 
-
-
-
 def create_path_getter(atype, parent, entery, var):
     def wrapper():
         if atype == 'folder':
             path = tkfd.askdirectory()
         else:
+            filetypes = []
             if atype == 'png':
                 filetypes = [("png files", "*.png")]
             elif atype == 'pdf':
                 filetypes = [("pdf files", "*.pdf")]
+                
             path = tkfd.askopenfilename(
                 parent=parent,
                 filetypes = filetypes,
@@ -216,22 +218,38 @@ def create_path_getter(atype, parent, entery, var):
         entery.xview_moveto(1)
     return wrapper
 
-def place_entery_row(parent, row, lable, atype, callback, deftext=''):
+def prepare_path(path: str):
+     return os.path.normpath(path) if path else ''
 
-    lable_logo_path = tk.Label(parent, text=lable)
-    lable_logo_path.grid(row=row, column=0, sticky='w')
+def place_entery_row(parent, row, lable, atype, option_name, options):
+    defval = options[option_name] if option_name in options else ''
 
-    var_path = tk.StringVar()
-    var_path.set(deftext)
-    entery = tk.Entry(parent, textvariable=var_path, validate="all", validatecommand=lambda: callback(var_path))
+    tk.Label(parent, text=lable).grid(row=row, column=0, sticky='w')
+
+    tkvar = tk.StringVar()
+    tkvar.set(defval)
+    entery = tk.Entry(parent, textvariable=tkvar, validate="all", validatecommand=lambda: saveOption(option_name, tkvar, prepare_path))
     entery.grid(row=row, column=1, sticky='ew')
-    entery.xview_moveto(1)
     
-    command =  create_path_getter(atype, parent, entery, var_path)
+    command =  create_path_getter(atype, parent, entery, tkvar)
     button_logo_path = tk.Button(parent,
         text='Найти',
         command=command)
     button_logo_path.grid(row=row, column=3, sticky='e')
+
+def place_select_row(parent: tk.Frame, row: 'int', lable: 'str', items: 'dict[str, tuple[float]]', option_name, options: 'dict[str, str]'):
+    defval = options[option_name] if option_name in options else None
+
+    tk.Label(parent, text=lable).grid(row=row, column=0, sticky='w')
+
+    tkvar = tk.StringVar()
+    tkvar.set(defval if defval != None else list(items.keys())[0])
+
+    entery = tk.OptionMenu(parent, tkvar, *items)
+
+    tkvar.trace('w', lambda *x: saveOption(option_name, tkvar, prepare_path))
+    
+    entery.grid(row=row, column=1, sticky='ew')
 
 tkApp = TkApp()
 tkApp.mainloop()

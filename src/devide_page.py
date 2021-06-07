@@ -6,12 +6,11 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
 from reportlab.lib.colors import red
 import io
-from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 
 
 
-def get_small_pages_bordered(base_page, page_size=A4,
+def get_small_pages_bordered(base_page, page_size,
                              span=1*cm, dush=[20, 12], line_weight=2, callback=None):
     span_both = span * 2
     pdf_writer = PdfFileWriter()
@@ -44,7 +43,7 @@ def get_small_pages_bordered(base_page, page_size=A4,
     return pdf_writer
     
 
-def get_small_pages(base_page, page_size=A4, border=1*cm,
+def get_small_pages(base_page, page_size, border=1*cm,
                     span=cm, dush=[20, 12], line_weight=2, callback=None):
     pdf_writer = PdfFileWriter()
     
@@ -144,10 +143,6 @@ def get_outline_page_bordered(base_page, text, offset_rect,
     crop_page(page, *offset_rect)
     page.mergePage(new_pdf.getPage(0))
     return page
-
-
-
-
 
 def get_outline_page(base_page, text, offset_rect,
                      page_size, span, dush, line_weigth, mode=0):

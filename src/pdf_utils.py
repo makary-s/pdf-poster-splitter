@@ -19,11 +19,11 @@ def get_page_size(page):
     return (page_w, page_h)
 
 def crop_page(page, x1, y1, x2, y2):
-    page.mediaBox.setLowerLeft((x1, y1))
-    page.mediaBox.setUpperRight((x2, y2))
-
     page.cropBox.setLowerLeft((x1, y1))
     page.cropBox.setUpperRight((x2, y2))
+
+    page.mediaBox.setLowerLeft((x1, y1))
+    page.mediaBox.setUpperRight((x2, y2))
 
     page.trimBox.setLowerLeft((x1, y1))
     page.trimBox.setUpperRight((x2, y2))
@@ -86,12 +86,15 @@ def get_ploter_page(page, width, min_height, debug_path=None, debug_targetpath=N
     return big_page
 
 
-def save_pdf(pages, name, dir):
+def save_pdf(pages: "PageObject | PageObject", name, dir):
+    
     if isinstance(pages, PdfFileWriter):
         pdf_writer = pages
     elif isinstance(pages, PageObject):
         pdf_writer = PdfFileWriter()
         pdf_writer.addPage(pages)
+    else: 
+        raise ValueError("Wrong page type")
 
     if not os.path.exists(dir):
         os.makedirs(dir)
