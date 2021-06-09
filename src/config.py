@@ -1,14 +1,19 @@
 # -*- coding: utf-8 -*-
 from reportlab.lib import pagesizes
 from reportlab.lib.units import cm
-from collections import namedtuple
+import re
+
+def formatNumber(val: 'int | float'):
+    rounded = round((val / cm) * 10, 1)
+
+    return re.sub(r'(.+?)\.?0+$',r'\1',str(rounded))
 
 def getSizeNames():
     sizes = [(name, getattr(pagesizes, name)) for name in dir(pagesizes) if name[0].isupper()]
 
     pretty_sizes: 'dict[str, tuple[float]]' = {};
     for (name, values) in sizes:
-        [width, height] = [int(round(val / cm, 2) * 10) for val in values]
+        [width, height] = [formatNumber(val) for val in values]
         pretty_name = "{name} ({width}x{height})".format(name=name, width=width, height=height)
         pretty_sizes[pretty_name] = values
 
