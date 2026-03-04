@@ -1,5 +1,13 @@
-if not exist .env (
-    pip install virtualenv && python -m virtualenv .env && .env\Scripts\activate && pip install -r requirements.txt && .env\Scripts\activate && python src\run.py
-) else (
-    .env\Scripts\activate && python src\run.py
+@echo off
+setlocal
+
+set PY_ENV=.venv
+
+if not exist %PY_ENV% (
+    python -m venv %PY_ENV%
+    call %PY_ENV%\Scripts\activate.bat
+    pip install -r requirements.txt
 )
+
+call %PY_ENV%\Scripts\activate.bat
+python src\run.py

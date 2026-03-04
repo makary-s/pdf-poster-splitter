@@ -247,7 +247,7 @@ def place_select_row(parent: tk.Frame, row: 'int', lable: 'str', items: 'dict[st
 
     entery = tk.OptionMenu(parent, tkvar, *items)
 
-    tkvar.trace('w', lambda *x: saveOption(option_name, tkvar, prepare_path))
+    tkvar.trace_add('write', lambda *x: saveOption(option_name, tkvar, prepare_path))
     
     entery.grid(row=row, column=1, sticky='ew')
 
