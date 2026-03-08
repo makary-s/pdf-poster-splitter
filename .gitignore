@@ -1,2 +1,6 @@
 .env
 __pycache__
+fyne-cross
+fyne_metadata_init.go
+dist/
+/pdf-poster-splitter
