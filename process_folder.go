@@ -14,14 +14,15 @@ import (
 var ErrProcessingStopped = errors.New("processing stopped")
 
 type appOptions struct {
-	InputPath   string
-	OutputPath  string
-	Logo        string
-	LogoWidth   float64
-	LogoOpacity float64 // percent, 0–100
-	TitlePage   string
-	TileSize    string
-	GlueMargin  float64
+	InputPath    string
+	OutputPath   string
+	Logo         string
+	LogoWidth    float64
+	LogoOpacity  float64 // percent, 0–100
+	TitlePage    string
+	TileSize     string
+	GlueMargin   float64
+	GlueStrategy string // "trailing" | "all"
 }
 
 type processCallbacks struct {
@@ -130,6 +131,7 @@ func createTilesPDF(
 	titlePage string,
 	tileSize TileSize,
 	glueMarginPt float64,
+	glueStrategy string,
 	outputPath string,
 	ctx context.Context,
 	callbacks processCallbacks,
@@ -143,7 +145,7 @@ func createTilesPDF(
 		}
 	}
 
-	err := splitIntoTiles(&pdf, posterSourcePath, tileSize, glueMarginPt, func(currentTile, totalTiles int) bool {
+	err := splitIntoTiles(&pdf, posterSourcePath, tileSize, glueMarginPt, glueStrategy, func(currentTile, totalTiles int) bool {
 		if callbacks.SetTileProgress != nil {
 			callbacks.SetTileProgress(currentTile, totalTiles)
 		}
@@ -192,7 +194,7 @@ func processFile(
 
 	glueMarginPt := mmToPt(options.GlueMargin)
 	outputPath := filepath.Join(job.targetPath, fmt.Sprintf("%s_%s.pdf", job.posterName, tileSize.FileSuffix))
-	return createTilesPDF(posterSourcePath, options.TitlePage, tileSize, glueMarginPt, outputPath, ctx, callbacks)
+	return createTilesPDF(posterSourcePath, options.TitlePage, tileSize, glueMarginPt, options.GlueStrategy, outputPath, ctx, callbacks)
 }
 
 func plannedOutputPaths(jobs []posterJob, options appOptions, tileSize TileSize) []string {

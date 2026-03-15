@@ -18,14 +18,15 @@ import (
 )
 
 const (
-	prefSourcePath  = "base_path"
-	prefTargetPath  = "target_path"
-	prefLogoPath    = "logo_path"
-	prefLogoWidth   = "logo_width_mm"
-	prefLogoOpacity = "logo_opacity"
-	prefTitlePath   = "title_path"
-	prefPaperSize   = "paper_size"
-	prefGlueMargin  = "glue_margin_mm"
+	prefSourcePath   = "base_path"
+	prefTargetPath   = "target_path"
+	prefLogoPath     = "logo_path"
+	prefLogoWidth    = "logo_width_mm"
+	prefLogoOpacity  = "logo_opacity"
+	prefTitlePath    = "title_path"
+	prefPaperSize    = "paper_size"
+	prefGlueMargin   = "glue_margin_mm"
+	prefGlueStrategy = "glue_strategy"
 )
 
 func runApp() error {
@@ -80,6 +81,24 @@ func runApp() error {
 	defaultMarginStr := fmt.Sprintf("%.4g", defaultGlueMargin)
 	glueMarginEntry := widget.NewEntry()
 	glueMarginEntry.SetText(prefs.StringWithFallback(prefGlueMargin, defaultMarginStr))
+
+	glueStrategyDisplays := []string{"Только справа и снизу", "Все внутренние стороны"}
+	glueStrategyByDisplay := map[string]string{
+		"Только справа и снизу":  "trailing",
+		"Все внутренние стороны": "all",
+	}
+	glueStrategyDisplayByKey := map[string]string{
+		"trailing": "Только справа и снизу",
+		"all":      "Все внутренние стороны",
+	}
+	defaultGlueStrategyDisplay := glueStrategyDisplayByKey[defaultGlueStrategy]
+	glueStrategySelect := widget.NewSelect(glueStrategyDisplays, func(selected string) {
+		prefs.SetString(prefGlueStrategy, selected)
+	})
+	glueStrategySelect.SetSelected(prefs.StringWithFallback(prefGlueStrategy, defaultGlueStrategyDisplay))
+	if glueStrategySelect.Selected == "" {
+		glueStrategySelect.SetSelected(defaultGlueStrategyDisplay)
+	}
 	// #endregion
 
 	// #region file dialogs
@@ -213,6 +232,7 @@ func runApp() error {
 		titleEntry.SetText("")
 		paperSelect.SetSelected(defaultPaper)
 		glueMarginEntry.SetText(defaultMarginStr)
+		glueStrategySelect.SetSelected(defaultGlueStrategyDisplay)
 
 		// Explicitly update preferences for those that might not trigger OnChanged if value is same
 		prefs.SetString(prefSourcePath, "")
@@ -223,6 +243,7 @@ func runApp() error {
 		prefs.SetString(prefTitlePath, "")
 		prefs.SetString(prefPaperSize, defaultPaper)
 		prefs.SetString(prefGlueMargin, defaultMarginStr)
+		prefs.SetString(prefGlueStrategy, defaultGlueStrategyDisplay)
 
 		sourceEntry.Validate()
 		targetEntry.Validate()
@@ -267,6 +288,7 @@ func runApp() error {
 	tilesGroup := container.NewVBox(
 		fieldRow("Формат бумаги", paperSelect, widget.NewLabel(""), "На листы этого формата будет нарезан каждый файл"),
 		fieldRow("Отступ для склейки (мм)", glueMarginEntry, widget.NewLabel(""), "Перекрытие между листами для точного совмещения"),
+		fieldRow("Стратегия склейки", glueStrategySelect, widget.NewLabel(""), "Как будут расположены линии склейки на листах"),
 	)
 
 	watermarkGroup := container.NewVBox(
@@ -356,14 +378,15 @@ func runApp() error {
 			logoOpacityVal = defaultLogoOpacity
 		}
 		options := appOptions{
-			InputPath:   sourceEntry.Text,
-			OutputPath:  targetEntry.Text,
-			Logo:        logoEntry.Text,
-			LogoWidth:   logoWidthVal,
-			LogoOpacity: logoOpacityVal,
-			TitlePage:   titleEntry.Text,
-			TileSize:    paperSelect.Selected,
-			GlueMargin:  marginVal,
+			InputPath:    sourceEntry.Text,
+			OutputPath:   targetEntry.Text,
+			Logo:         logoEntry.Text,
+			LogoWidth:    logoWidthVal,
+			LogoOpacity:  logoOpacityVal,
+			TitlePage:    titleEntry.Text,
+			TileSize:     paperSelect.Selected,
+			GlueMargin:   marginVal,
+			GlueStrategy: glueStrategyByDisplay[glueStrategySelect.Selected],
 		}
 
 		go func() {
@@ -408,6 +431,16 @@ func runApp() error {
 	}
 
 	// #region layout assembly
+	versionLabel := widget.NewRichText(&widget.TextSegment{
+		Style: widget.RichTextStyle{
+			ColorName: theme.ColorNamePlaceHolder,
+			SizeName:  theme.SizeNameCaptionText,
+			Inline:    true,
+		},
+		Text: appVersion(),
+	})
+	topBar := container.NewBorder(nil, nil, nil, versionLabel, nil)
+
 	actionPanel := container.NewVBox(
 		widget.NewSeparator(),
 		progressPanel,
@@ -416,7 +449,7 @@ func runApp() error {
 
 	scrollableForm := container.NewVScroll(form)
 
-	mainContent := container.NewBorder(nil, actionPanel, nil, nil, scrollableForm)
+	mainContent := container.NewBorder(topBar, actionPanel, nil, nil, scrollableForm)
 
 	w.SetContent(container.NewPadded(mainContent))
 	w.ShowAndRun()

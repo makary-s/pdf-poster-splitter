@@ -76,33 +76,52 @@ func getFirstPageSize(sourcePath string) (float64, float64, error) {
 	return 0, 0, fmt.Errorf("no supported page box for %q", sourcePath)
 }
 
-// drawCutLines draws dashed glue lines only where a neighboring tile exists.
-// When both lines are present they terminate at their intersection instead of
-// crossing (spec: "при пересечении линии обрываются").
-func drawCutLines(pdf *gopdf.GoPdf, tileSize TileSize, glueMarginPt float64, hasRightGlue, hasBottomGlue bool) {
-	if !hasRightGlue && !hasBottomGlue {
+// drawCutLines draws dashed glue lines on sides where a neighboring tile exists.
+// Lines terminate at their intersections instead of crossing — corner areas with
+// double overlap are left empty (spec: "угловые области остаются без линий").
+// Strategy "trailing": only right and bottom. Strategy "all": all four inner sides.
+func drawCutLines(pdf *gopdf.GoPdf, tileSize TileSize, glueMarginPt float64, hasLeft, hasTop, hasRight, hasBottom bool) {
+	if !hasLeft && !hasTop && !hasRight && !hasBottom {
 		return
+	}
+
+	W := tileSize.WidthPt
+	H := tileSize.HeightPt
+	m := glueMarginPt
+
+	// Vertical lines run from topClip to bottomClip; horizontal from leftClip to rightClip.
+	topClip := 0.0
+	if hasTop {
+		topClip = m
+	}
+	bottomClip := H
+	if hasBottom {
+		bottomClip = H - m
+	}
+	leftClip := 0.0
+	if hasLeft {
+		leftClip = m
+	}
+	rightClip := W
+	if hasRight {
+		rightClip = W - m
 	}
 
 	pdf.SetStrokeColor(glueLineColorR, glueLineColorG, glueLineColorB)
 	pdf.SetLineType(glueLineStyle)
 	pdf.SetLineWidth(cutLineWeightPt)
 
-	if hasRightGlue {
-		x := tileSize.WidthPt - glueMarginPt
-		if hasBottomGlue {
-			pdf.Line(x, 0, x, tileSize.HeightPt-glueMarginPt)
-		} else {
-			pdf.Line(x, 0, x, tileSize.HeightPt)
-		}
+	if hasLeft {
+		pdf.Line(m, topClip, m, bottomClip)
 	}
-	if hasBottomGlue {
-		y := tileSize.HeightPt - glueMarginPt
-		if hasRightGlue {
-			pdf.Line(0, y, tileSize.WidthPt-glueMarginPt, y)
-		} else {
-			pdf.Line(0, y, tileSize.WidthPt, y)
-		}
+	if hasRight {
+		pdf.Line(W-m, topClip, W-m, bottomClip)
+	}
+	if hasTop {
+		pdf.Line(leftClip, m, rightClip, m)
+	}
+	if hasBottom {
+		pdf.Line(leftClip, H-m, rightClip, H-m)
 	}
 
 	pdf.SetLineType("straight")
@@ -158,6 +177,7 @@ func splitIntoTiles(
 	sourcePath string,
 	tileSize TileSize,
 	glueMarginPt float64,
+	strategy string,
 	onTile tileProgressCallback,
 ) error {
 	if err := ensurePDFFont(pdf); err != nil {
@@ -177,8 +197,10 @@ func splitIntoTiles(
 
 	for iy := 0; iy < tileRows; iy++ {
 		for ix := 0; ix < tileColumns; ix++ {
-			hasRightGlue := ix < tileColumns-1
-			hasBottomGlue := iy < tileRows-1
+			hasLeft  := strategy == "all" && ix > 0
+			hasTop   := strategy == "all" && iy > 0
+			hasRight := ix < tileColumns-1
+			hasBottom := iy < tileRows-1
 			label := fmt.Sprintf("%d.%d", ix+1, iy+1)
 			viewport := getTileViewport(ix, iy, tileSize, glueMarginPt)
 
@@ -186,8 +208,8 @@ func splitIntoTiles(
 			offsetY := -viewport.y1
 
 			appendImportedPage(pdf, tplID, offsetX, offsetY, posterW, posterH)
-			drawCutLines(pdf, tileSize, glueMarginPt, hasRightGlue, hasBottomGlue)
-			if err := drawTileLabel(pdf, tileSize, glueMarginPt, label, hasRightGlue, hasBottomGlue); err != nil {
+			drawCutLines(pdf, tileSize, glueMarginPt, hasLeft, hasTop, hasRight, hasBottom)
+			if err := drawTileLabel(pdf, tileSize, glueMarginPt, label, hasRight, hasBottom); err != nil {
 				return err
 			}
 

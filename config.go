@@ -17,6 +17,7 @@ const (
 	glueLineColorG uint8 = 0
 	glueLineColorB uint8 = 0
 	glueLineStyle        = "dashed"
+	defaultGlueStrategy  = "trailing" // "trailing" | "all"
 
 	watermarkAngle = 30.0
 
