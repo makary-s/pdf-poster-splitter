@@ -76,10 +76,23 @@ func getFirstPageSize(sourcePath string) (float64, float64, error) {
 	return 0, 0, fmt.Errorf("no supported page box for %q", sourcePath)
 }
 
-// drawCutLines draws dashed glue lines on sides where a neighboring tile exists.
+// glueLineSides returns which sides of the tile page get a glue line for the given strategy.
+// trailing: only right and bottom toward the next tile. all: every side that borders another tile.
+// full: all four sides of every tile, including the outer perimeter of the poster.
+func glueLineSides(strategy string, ix, iy, tileColumns, tileRows int) (hasLeft, hasTop, hasRight, hasBottom bool) {
+	switch strategy {
+	case "full":
+		return true, true, true, true
+	case "all":
+		return ix > 0, iy > 0, ix < tileColumns-1, iy < tileRows-1
+	default: // "trailing" and unknown
+		return false, false, ix < tileColumns-1, iy < tileRows-1
+	}
+}
+
+// drawCutLines draws dashed glue lines on the selected sides of the tile page.
 // Lines terminate at their intersections instead of crossing — corner areas with
 // double overlap are left empty (spec: "угловые области остаются без линий").
-// Strategy "trailing": only right and bottom. Strategy "all": all four inner sides.
 func drawCutLines(pdf *gopdf.GoPdf, tileSize TileSize, glueMarginPt float64, hasLeft, hasTop, hasRight, hasBottom bool) {
 	if !hasLeft && !hasTop && !hasRight && !hasBottom {
 		return
@@ -127,37 +140,32 @@ func drawCutLines(pdf *gopdf.GoPdf, tileSize TileSize, glueMarginPt float64, has
 	pdf.SetLineType("straight")
 }
 
-// drawTileLabel places the tile coordinate label.
-// Orientation rules (spec): only right glueLine -> vertical inside right margin strip;
-// bottom glueLine present or no glueLine at all -> horizontal in bottom-right corner.
-func drawTileLabel(pdf *gopdf.GoPdf, tileSize TileSize, glueMarginPt float64, label string, hasRightGlue, hasBottomGlue bool) error {
+// drawTileLabel draws the tile grid label (col.row) at the bottom-right of the tile page.
+// Insets from outer edges (SPEC @Flow:SplitIntoTiles): bottom glueLine.margin + 0.3× font size;
+// right glueLine.margin + 0.5× font size.
+func drawTileLabel(pdf *gopdf.GoPdf, tileSize TileSize, glueMarginPt float64, label string) error {
 	fontSize := glueMarginPt * 0.7
 	if err := pdf.SetFont(appFontFamily, "", fontSize); err != nil {
 		return err
 	}
 	pdf.SetTextColor(glueLineColorR, glueLineColorG, glueLineColorB)
 
-	labelWidthEstimate := math.Max(20, float64(len(label))*fontSize*0.55)
-
-	if hasRightGlue && !hasBottomGlue {
-		// Vertical: rotate 90° so text runs bottom-to-top, anchored at bottom-right corner.
-		gap := glueMarginPt * 0.15
-		cx := tileSize.WidthPt - glueMarginPt/2
-		cy := tileSize.HeightPt - gap - labelWidthEstimate/2
-		pdf.Rotate(90, cx, cy)
-		pdf.SetXY(cx-labelWidthEstimate/2, cy+fontSize*0.35)
-		pdf.Text(label)
-		pdf.RotateReset()
-	} else {
-		// Horizontal: bottom-right corner, inside bottom glue margin if present.
-		gap := glueMarginPt * 0.15
-		x := tileSize.WidthPt - gap - labelWidthEstimate
-		y := tileSize.HeightPt - gap
-		pdf.SetXY(x, y)
-		pdf.Text(label)
+	textWidth, err := pdf.MeasureTextWidth(label)
+	if err != nil {
+		return err
 	}
 
-	return nil
+	W := tileSize.WidthPt
+	H := tileSize.HeightPt
+	insetBottom := glueMarginPt + 0.3*fontSize
+	insetRight := glueMarginPt + 0.5*fontSize
+	// gopdf's y is the text baseline; approximate descender so the ink bottom sits at H - insetBottom.
+	descentPt := fontSize * 0.22
+
+	x := W - insetRight - textWidth
+	y := H - insetBottom - descentPt
+	pdf.SetXY(x, y)
+	return pdf.Text(label)
 }
 
 func appendImportedPage(
@@ -197,10 +205,7 @@ func splitIntoTiles(
 
 	for iy := 0; iy < tileRows; iy++ {
 		for ix := 0; ix < tileColumns; ix++ {
-			hasLeft  := strategy == "all" && ix > 0
-			hasTop   := strategy == "all" && iy > 0
-			hasRight := ix < tileColumns-1
-			hasBottom := iy < tileRows-1
+			hasLeft, hasTop, hasRight, hasBottom := glueLineSides(strategy, ix, iy, tileColumns, tileRows)
 			label := fmt.Sprintf("%d.%d", ix+1, iy+1)
 			viewport := getTileViewport(ix, iy, tileSize, glueMarginPt)
 
@@ -209,7 +214,7 @@ func splitIntoTiles(
 
 			appendImportedPage(pdf, tplID, offsetX, offsetY, posterW, posterH)
 			drawCutLines(pdf, tileSize, glueMarginPt, hasLeft, hasTop, hasRight, hasBottom)
-			if err := drawTileLabel(pdf, tileSize, glueMarginPt, label, hasRight, hasBottom); err != nil {
+			if err := drawTileLabel(pdf, tileSize, glueMarginPt, label); err != nil {
 				return err
 			}
 

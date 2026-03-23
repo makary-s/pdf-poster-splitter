@@ -37,9 +37,6 @@ func runApp() error {
 	w.SetFixedSize(false) // Just ensuring it's not fixed, though it's default
 
 	prefs := a.Preferences()
-	runOnUI := func(fn func()) {
-		fn()
-	}
 
 	// #region settings form
 	sourceEntry := widget.NewEntry()
@@ -69,35 +66,40 @@ func runApp() error {
 	}
 
 	paperOptions := tileSizeDisplays()
-	defaultPaper := defaultTileSize().Display
+	defaultPaperSize := defaultTileSize()
+	defaultPaperDisplay := defaultPaperSize.Display
 	paperSelect := widget.NewSelect(paperOptions, func(selected string) {
-		prefs.SetString(prefPaperSize, selected)
+		prefs.SetString(prefPaperSize, tileSizeFromSelectLabel(selected).Name)
 	})
-	paperSelect.SetSelected(prefs.StringWithFallback(prefPaperSize, defaultPaper))
+	storedPaper := prefs.StringWithFallback(prefPaperSize, "")
+	paperSize, migratePaperPref := tileSizeFromStoredPref(storedPaper)
+	if migratePaperPref {
+		prefs.SetString(prefPaperSize, paperSize.Name)
+	}
+	paperSelect.SetSelected(paperSize.Display)
 	if paperSelect.Selected == "" {
-		paperSelect.SetSelected(defaultPaper)
+		paperSelect.SetSelected(defaultPaperDisplay)
+		prefs.SetString(prefPaperSize, defaultPaperSize.Name)
 	}
 
 	defaultMarginStr := fmt.Sprintf("%.4g", defaultGlueMargin)
 	glueMarginEntry := widget.NewEntry()
 	glueMarginEntry.SetText(prefs.StringWithFallback(prefGlueMargin, defaultMarginStr))
 
-	glueStrategyDisplays := []string{"Только справа и снизу", "Все внутренние стороны"}
-	glueStrategyByDisplay := map[string]string{
-		"Только справа и снизу":  "trailing",
-		"Все внутренние стороны": "all",
-	}
-	glueStrategyDisplayByKey := map[string]string{
-		"trailing": "Только справа и снизу",
-		"all":      "Все внутренние стороны",
-	}
-	defaultGlueStrategyDisplay := glueStrategyDisplayByKey[defaultGlueStrategy]
-	glueStrategySelect := widget.NewSelect(glueStrategyDisplays, func(selected string) {
-		prefs.SetString(prefGlueStrategy, selected)
+	glueStrategyOptions := glueStrategySelectOptionStrings()
+	defaultGlueLabel := glueStrategyLabels[defaultGlueStrategyKey()]
+	glueStrategySelect := widget.NewSelect(glueStrategyOptions, func(selected string) {
+		prefs.SetString(prefGlueStrategy, string(glueStrategyKeyFromLabel(selected)))
 	})
-	glueStrategySelect.SetSelected(prefs.StringWithFallback(prefGlueStrategy, defaultGlueStrategyDisplay))
+	storedGlue := prefs.StringWithFallback(prefGlueStrategy, "")
+	glueKey, migrateGluePref := glueStrategyFromStoredPref(storedGlue)
+	if migrateGluePref {
+		prefs.SetString(prefGlueStrategy, string(glueKey))
+	}
+	glueStrategySelect.SetSelected(glueStrategyLabels[glueKey])
 	if glueStrategySelect.Selected == "" {
-		glueStrategySelect.SetSelected(defaultGlueStrategyDisplay)
+		glueStrategySelect.SetSelected(defaultGlueLabel)
+		prefs.SetString(prefGlueStrategy, string(defaultGlueStrategyKey()))
 	}
 	// #endregion
 
@@ -230,9 +232,9 @@ func runApp() error {
 		logoWidthEntry.SetText(defaultLogoWidthStr)
 		logoOpacityEntry.SetText(defaultLogoOpacityStr)
 		titleEntry.SetText("")
-		paperSelect.SetSelected(defaultPaper)
+		paperSelect.SetSelected(defaultPaperDisplay)
 		glueMarginEntry.SetText(defaultMarginStr)
-		glueStrategySelect.SetSelected(defaultGlueStrategyDisplay)
+		glueStrategySelect.SetSelected(defaultGlueLabel)
 
 		// Explicitly update preferences for those that might not trigger OnChanged if value is same
 		prefs.SetString(prefSourcePath, "")
@@ -241,9 +243,9 @@ func runApp() error {
 		prefs.SetString(prefLogoWidth, defaultLogoWidthStr)
 		prefs.SetString(prefLogoOpacity, defaultLogoOpacityStr)
 		prefs.SetString(prefTitlePath, "")
-		prefs.SetString(prefPaperSize, defaultPaper)
+		prefs.SetString(prefPaperSize, defaultPaperSize.Name)
 		prefs.SetString(prefGlueMargin, defaultMarginStr)
-		prefs.SetString(prefGlueStrategy, defaultGlueStrategyDisplay)
+		prefs.SetString(prefGlueStrategy, string(defaultGlueStrategyKey()))
 
 		sourceEntry.Validate()
 		targetEntry.Validate()
@@ -384,26 +386,26 @@ func runApp() error {
 			LogoWidth:    logoWidthVal,
 			LogoOpacity:  logoOpacityVal,
 			TitlePage:    titleEntry.Text,
-			TileSize:     paperSelect.Selected,
+			TileSize:     tileSizeFromSelectLabel(paperSelect.Selected).Name,
 			GlueMargin:   marginVal,
-			GlueStrategy: glueStrategyByDisplay[glueStrategySelect.Selected],
+			GlueStrategy: string(glueStrategyKeyFromLabel(glueStrategySelect.Selected)),
 		}
 
 		go func() {
 			err := processFolder(ctx, options, processCallbacks{
 				SetFileProgress: func(current, total int) {
-					runOnUI(func() {
+					fyne.Do(func() {
 						setProgress(fileProgress, fileProgressLabel, current, total)
 					})
 				},
 				SetTileProgress: func(current, total int) {
-					runOnUI(func() {
+					fyne.Do(func() {
 						setProgress(tileProgress, tileProgressLabel, current, total)
 					})
 				},
 				ConfirmOverwrite: func() bool {
 					confirmed := make(chan bool, 1)
-					runOnUI(func() {
+					fyne.Do(func() {
 						dialog.ShowConfirm(
 							"Файлы уже существуют",
 							"В папке назначения уже есть файлы, которые будут перезаписаны. Продолжить?",
@@ -415,7 +417,7 @@ func runApp() error {
 				},
 			})
 
-			runOnUI(func() {
+			fyne.Do(func() {
 				defer finishRun()
 
 				switch {

@@ -13,11 +13,11 @@ const (
 	cutLineWeightPt = 2.0
 	logoGapPt       = 3.0 * pointsPerInch / cmPerInch
 
-	glueLineColorR uint8 = 255
-	glueLineColorG uint8 = 0
-	glueLineColorB uint8 = 0
-	glueLineStyle        = "dashed"
-	defaultGlueStrategy  = "trailing" // "trailing" | "all"
+	glueLineColorR      uint8 = 255
+	glueLineColorG      uint8 = 0
+	glueLineColorB      uint8 = 0
+	glueLineStyle             = "dashed"
+	defaultGlueStrategy       = "trailing" // "trailing" | "all" | "full"
 
 	watermarkAngle = 30.0
 

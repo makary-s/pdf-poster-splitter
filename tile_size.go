@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type TileSize struct {
 	Name       string
@@ -49,6 +52,14 @@ var tileSizeByDisplay = func() map[string]TileSize {
 	return res
 }()
 
+var tileSizeByName = func() map[string]TileSize {
+	res := make(map[string]TileSize, len(tileSizes))
+	for _, size := range tileSizes {
+		res[size.Name] = size
+	}
+	return res
+}()
+
 func tileSizeDisplays() []string {
 	items := make([]string, 0, len(tileSizes))
 	for _, size := range tileSizes {
@@ -66,10 +77,36 @@ func defaultTileSize() TileSize {
 	return tileSizes[0]
 }
 
-func getTileSizeByDisplay(display string) TileSize {
-	size, ok := tileSizeByDisplay[display]
-	if ok {
+func getTileSizeByName(key string) TileSize {
+	key = strings.TrimSpace(key)
+	if size, ok := tileSizeByName[key]; ok {
 		return size
+	}
+	return defaultTileSize()
+}
+
+// tileSizeFromStoredPref resolves a preferences value: canonical Name, legacy Display, or default.
+// The second return is true when prefs should be rewritten to the canonical name.
+func tileSizeFromStoredPref(raw string) (TileSize, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return defaultTileSize(), false
+	}
+	if size, ok := tileSizeByName[raw]; ok {
+		return size, false
+	}
+	if size, ok := tileSizeByDisplay[raw]; ok {
+		return size, true
+	}
+	return defaultTileSize(), true
+}
+
+// tileSizeFromSelectLabel maps the Fyne select option (Display) back to TileSize.
+func tileSizeFromSelectLabel(label string) TileSize {
+	for _, size := range tileSizes {
+		if size.Display == label {
+			return size
+		}
 	}
 	return defaultTileSize()
 }

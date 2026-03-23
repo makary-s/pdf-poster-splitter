@@ -20,15 +20,15 @@ type appOptions struct {
 	LogoWidth    float64
 	LogoOpacity  float64 // percent, 0–100
 	TitlePage    string
-	TileSize     string
+	TileSize     string // canonical format name (TileSize.Name / file suffix), not Display
 	GlueMargin   float64
-	GlueStrategy string // "trailing" | "all"
+	GlueStrategy string // "trailing" | "all" | "full"
 }
 
 type processCallbacks struct {
-	SetFileProgress   func(current int, total int)
-	SetTileProgress   func(current int, total int)
-	ConfirmOverwrite  func() bool // called when planned outputs already exist; return false to abort
+	SetFileProgress  func(current int, total int)
+	SetTileProgress  func(current int, total int)
+	ConfirmOverwrite func() bool // called when planned outputs already exist; return false to abort
 }
 
 type posterJob struct {
@@ -232,7 +232,7 @@ func processFolder(
 		return err
 	}
 
-	tileSize := getTileSizeByDisplay(options.TileSize)
+	tileSize := getTileSizeByName(options.TileSize)
 
 	if anyPlannedOutputExists(plannedOutputPaths(jobs, options, tileSize)) {
 		if callbacks.ConfirmOverwrite == nil || !callbacks.ConfirmOverwrite() {
