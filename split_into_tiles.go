@@ -22,6 +22,15 @@ type tileProgressCallback func(currentTile int, totalTiles int) (shouldStop bool
 // without tolerance that 0.004 pt gap triggers extra tile rows/columns.
 const tileTolerance = 0.5
 
+func usesDistributedGlueOverlap(strategy string) bool {
+	switch strategy {
+	case "all", "full":
+		return true
+	default:
+		return false
+	}
+}
+
 // getTileCount returns how many tiles fit along one axis.
 // Spec algorithm: each tile after the first starts at (step = tileDim - margin) from the previous,
 // so the last tile always covers to the end of the poster.
@@ -41,13 +50,36 @@ func getTileCount(posterDim, tileDim, margin float64) int {
 	return int(n) + 1
 }
 
+func getTileAxisStarts(posterDim, tileDim, glueMarginPt float64, strategy string) []float64 {
+	if posterDim <= tileDim+tileTolerance {
+		return []float64{0}
+	}
+
+	if usesDistributedGlueOverlap(strategy) {
+		return buildAxisStartsByStep(posterDim, tileDim, tileDim-2*glueMarginPt)
+	}
+
+	return buildAxisStartsByStep(posterDim, tileDim, tileDim-glueMarginPt)
+}
+
+func buildAxisStartsByStep(posterDim, tileDim, step float64) []float64 {
+	if step <= 0 {
+		return []float64{0}
+	}
+
+	count := getTileCount(posterDim, tileDim, tileDim-step)
+	starts := make([]float64, count)
+	for i := 0; i < count; i++ {
+		starts[i] = float64(i) * step
+	}
+	return starts
+}
+
 // getTileViewport returns the poster-coordinate region a tile at (ix, iy) should show.
 // Origin is the top-left corner of the poster; axes grow right and down.
-func getTileViewport(ix, iy int, tileSize TileSize, glueMarginPt float64) tileViewport {
-	stepX := tileSize.WidthPt - glueMarginPt
-	stepY := tileSize.HeightPt - glueMarginPt
-	x1 := float64(ix) * stepX
-	y1 := float64(iy) * stepY
+func getTileViewport(ix, iy int, xStarts, yStarts []float64, tileSize TileSize) tileViewport {
+	x1 := xStarts[ix]
+	y1 := yStarts[iy]
 	return tileViewport{x1: x1, y1: y1, x2: x1 + tileSize.WidthPt, y2: y1 + tileSize.HeightPt}
 }
 
@@ -198,8 +230,10 @@ func splitIntoTiles(
 	}
 
 	tplID := pdf.ImportPage(sourcePath, 1, "/MediaBox")
-	tileColumns := getTileCount(posterW, tileSize.WidthPt, glueMarginPt)
-	tileRows := getTileCount(posterH, tileSize.HeightPt, glueMarginPt)
+	xStarts := getTileAxisStarts(posterW, tileSize.WidthPt, glueMarginPt, strategy)
+	yStarts := getTileAxisStarts(posterH, tileSize.HeightPt, glueMarginPt, strategy)
+	tileColumns := len(xStarts)
+	tileRows := len(yStarts)
 	total := tileColumns * tileRows
 	current := 0
 
@@ -207,7 +241,7 @@ func splitIntoTiles(
 		for ix := 0; ix < tileColumns; ix++ {
 			hasLeft, hasTop, hasRight, hasBottom := glueLineSides(strategy, ix, iy, tileColumns, tileRows)
 			label := fmt.Sprintf("%d.%d", ix+1, iy+1)
-			viewport := getTileViewport(ix, iy, tileSize, glueMarginPt)
+			viewport := getTileViewport(ix, iy, xStarts, yStarts, tileSize)
 
 			offsetX := -viewport.x1
 			offsetY := -viewport.y1
