@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/phpdave11/gofpdi"
 	"github.com/signintech/gopdf"
 )
 
@@ -81,31 +80,6 @@ func getTileViewport(ix, iy int, xStarts, yStarts []float64, tileSize TileSize) 
 	x1 := xStarts[ix]
 	y1 := yStarts[iy]
 	return tileViewport{x1: x1, y1: y1, x2: x1 + tileSize.WidthPt, y2: y1 + tileSize.HeightPt}
-}
-
-func getFirstPageSize(sourcePath string) (float64, float64, error) {
-	importer := gofpdi.NewImporter()
-	importer.SetSourceFile(sourcePath)
-	sizes := importer.GetPageSizes()
-	page, ok := sizes[1]
-	if !ok {
-		return 0, 0, fmt.Errorf("failed to read first page size for %q", sourcePath)
-	}
-
-	for _, boxName := range []string{"/MediaBox", "/CropBox", "MediaBox", "CropBox"} {
-		box, ok := page[boxName]
-		if !ok {
-			continue
-		}
-
-		width, wOK := box["w"]
-		height, hOK := box["h"]
-		if wOK && hOK && width > 0 && height > 0 {
-			return width, height, nil
-		}
-	}
-
-	return 0, 0, fmt.Errorf("no supported page box for %q", sourcePath)
 }
 
 // glueLineSides returns which sides of the tile page get a glue line for the given strategy.
@@ -224,14 +198,14 @@ func splitIntoTiles(
 		return err
 	}
 
-	posterW, posterH, err := getFirstPageSize(sourcePath)
+	geometry, err := getFirstPageGeometry(sourcePath)
 	if err != nil {
 		return err
 	}
 
 	tplID := pdf.ImportPage(sourcePath, 1, "/MediaBox")
-	xStarts := getTileAxisStarts(posterW, tileSize.WidthPt, glueMarginPt, strategy)
-	yStarts := getTileAxisStarts(posterH, tileSize.HeightPt, glueMarginPt, strategy)
+	xStarts := getTileAxisStarts(geometry.visualWidthPt, tileSize.WidthPt, glueMarginPt, strategy)
+	yStarts := getTileAxisStarts(geometry.visualHeightPt, tileSize.HeightPt, glueMarginPt, strategy)
 	tileColumns := len(xStarts)
 	tileRows := len(yStarts)
 	total := tileColumns * tileRows
@@ -246,7 +220,7 @@ func splitIntoTiles(
 			offsetX := -viewport.x1
 			offsetY := -viewport.y1
 
-			appendImportedPage(pdf, tplID, offsetX, offsetY, posterW, posterH)
+			appendImportedPage(pdf, tplID, offsetX, offsetY, geometry.visualWidthPt, geometry.visualHeightPt)
 			drawCutLines(pdf, tileSize, glueMarginPt, hasLeft, hasTop, hasRight, hasBottom)
 			if err := drawTileLabel(pdf, tileSize, glueMarginPt, label); err != nil {
 				return err

@@ -18,15 +18,16 @@ import (
 )
 
 const (
-	prefSourcePath   = "base_path"
-	prefTargetPath   = "target_path"
-	prefLogoPath     = "logo_path"
-	prefLogoWidth    = "logo_width_mm"
-	prefLogoOpacity  = "logo_opacity"
-	prefTitlePath    = "title_path"
-	prefPaperSize    = "paper_size"
-	prefGlueMargin   = "glue_margin_mm"
-	prefGlueStrategy = "glue_strategy"
+	prefSourcePath    = "base_path"
+	prefTargetPath    = "target_path"
+	prefLogoPath      = "logo_path"
+	prefLogoWidth     = "logo_width_mm"
+	prefLogoOpacity   = "logo_opacity"
+	prefWatermarkMode = "watermark_strategy"
+	prefTitlePath     = "title_path"
+	prefPaperSize     = "paper_size"
+	prefGlueMargin    = "glue_margin_mm"
+	prefGlueStrategy  = "glue_strategy"
 )
 
 func runApp() error {
@@ -58,6 +59,22 @@ func runApp() error {
 	defaultLogoOpacityStr := fmt.Sprintf("%.4g", defaultLogoOpacity)
 	logoOpacityEntry := widget.NewEntry()
 	logoOpacityEntry.SetText(prefs.StringWithFallback(prefLogoOpacity, defaultLogoOpacityStr))
+
+	watermarkStrategyOptions := watermarkStrategySelectOptionStrings()
+	defaultWatermarkLabel := watermarkStrategyLabels[defaultWatermarkStrategyKey()]
+	watermarkStrategySelect := widget.NewSelect(watermarkStrategyOptions, func(selected string) {
+		prefs.SetString(prefWatermarkMode, string(watermarkStrategyKeyFromLabel(selected)))
+	})
+	storedWatermarkStrategy := prefs.StringWithFallback(prefWatermarkMode, "")
+	watermarkStrategy, migrateWatermarkStrategyPref := watermarkStrategyFromStoredPref(storedWatermarkStrategy)
+	if migrateWatermarkStrategyPref {
+		prefs.SetString(prefWatermarkMode, string(watermarkStrategy))
+	}
+	watermarkStrategySelect.SetSelected(watermarkStrategyLabels[watermarkStrategy])
+	if watermarkStrategySelect.Selected == "" {
+		watermarkStrategySelect.SetSelected(defaultWatermarkLabel)
+		prefs.SetString(prefWatermarkMode, string(defaultWatermarkStrategyKey()))
+	}
 
 	titleEntry := widget.NewEntry()
 	titleEntry.SetText(prefs.StringWithFallback(prefTitlePath, ""))
@@ -231,6 +248,7 @@ func runApp() error {
 		logoEntry.SetText("")
 		logoWidthEntry.SetText(defaultLogoWidthStr)
 		logoOpacityEntry.SetText(defaultLogoOpacityStr)
+		watermarkStrategySelect.SetSelected(defaultWatermarkLabel)
 		titleEntry.SetText("")
 		paperSelect.SetSelected(defaultPaperDisplay)
 		glueMarginEntry.SetText(defaultMarginStr)
@@ -242,6 +260,7 @@ func runApp() error {
 		prefs.SetString(prefLogoPath, "")
 		prefs.SetString(prefLogoWidth, defaultLogoWidthStr)
 		prefs.SetString(prefLogoOpacity, defaultLogoOpacityStr)
+		prefs.SetString(prefWatermarkMode, string(defaultWatermarkStrategyKey()))
 		prefs.SetString(prefTitlePath, "")
 		prefs.SetString(prefPaperSize, defaultPaperSize.Name)
 		prefs.SetString(prefGlueMargin, defaultMarginStr)
@@ -297,6 +316,7 @@ func runApp() error {
 		fieldRow("Логотип", logoEntry, widget.NewButton("Найти", func() {
 			selectFile([]string{".png"}, logoEntry.SetText)
 		}), "PNG-картинка, накладывается на каждый плакат"),
+		fieldRow("Стратегия наложения", watermarkStrategySelect, widget.NewLabel(""), "Один растр поверх страницы увеличивает размер файла, но может открываться быстрее."),
 		fieldRow("Ширина логотипа (мм)", logoWidthEntry, widget.NewLabel(""), "Высота вычисляется пропорционально"),
 		fieldRow("Прозрачность логотипа (%)", logoOpacityEntry, widget.NewLabel(""), "0 — полностью прозрачный, 100 — полностью непрозрачный"),
 	)
@@ -380,15 +400,16 @@ func runApp() error {
 			logoOpacityVal = defaultLogoOpacity
 		}
 		options := appOptions{
-			InputPath:    sourceEntry.Text,
-			OutputPath:   targetEntry.Text,
-			Logo:         logoEntry.Text,
-			LogoWidth:    logoWidthVal,
-			LogoOpacity:  logoOpacityVal,
-			TitlePage:    titleEntry.Text,
-			TileSize:     tileSizeFromSelectLabel(paperSelect.Selected).Name,
-			GlueMargin:   marginVal,
-			GlueStrategy: string(glueStrategyKeyFromLabel(glueStrategySelect.Selected)),
+			InputPath:         sourceEntry.Text,
+			OutputPath:        targetEntry.Text,
+			Logo:              logoEntry.Text,
+			LogoWidth:         logoWidthVal,
+			LogoOpacity:       logoOpacityVal,
+			WatermarkStrategy: string(watermarkStrategyKeyFromLabel(watermarkStrategySelect.Selected)),
+			TitlePage:         titleEntry.Text,
+			TileSize:          tileSizeFromSelectLabel(paperSelect.Selected).Name,
+			GlueMargin:        marginVal,
+			GlueStrategy:      string(glueStrategyKeyFromLabel(glueStrategySelect.Selected)),
 		}
 
 		go func() {

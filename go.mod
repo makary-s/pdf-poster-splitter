@@ -4,9 +4,10 @@ go 1.22
 
 require (
 	fyne.io/fyne/v2 v2.6.0
-	github.com/phpdave11/gofpdi v1.0.15
+	github.com/disintegration/imaging v1.6.2
 	github.com/signintech/gopdf v0.36.0
 	golang.org/x/image v0.24.0
+	rsc.io/pdf v0.1.1
 )
 
 require (
@@ -31,6 +32,7 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/nicksnyder/go-i18n/v2 v2.5.1 // indirect
+	github.com/phpdave11/gofpdi v1.0.15 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rymdport/portal v0.4.1 // indirect

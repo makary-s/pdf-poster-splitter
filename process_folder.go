@@ -14,15 +14,16 @@ import (
 var ErrProcessingStopped = errors.New("processing stopped")
 
 type appOptions struct {
-	InputPath    string
-	OutputPath   string
-	Logo         string
-	LogoWidth    float64
-	LogoOpacity  float64 // percent, 0–100
-	TitlePage    string
-	TileSize     string // canonical format name (TileSize.Name / file suffix), not Display
-	GlueMargin   float64
-	GlueStrategy string // "trailing" | "all" | "full"
+	InputPath         string
+	OutputPath        string
+	Logo              string
+	LogoWidth         float64
+	LogoOpacity       float64 // percent, 0–100
+	WatermarkStrategy string  // "vector_grid" | "raster_grid"
+	TitlePage         string
+	TileSize          string // canonical format name (TileSize.Name / file suffix), not Display
+	GlueMargin        float64
+	GlueStrategy      string // "trailing" | "all" | "full"
 }
 
 type processCallbacks struct {
@@ -36,6 +37,29 @@ type posterJob struct {
 	targetPath  string
 	posterName  string
 }
+
+// #region Output artifact naming
+
+func watermarkedPosterPath(job posterJob) string {
+	return filepath.Join(job.targetPath, job.posterName+".pdf")
+}
+
+func tiledPosterPath(job posterJob, tileSize TileSize) string {
+	return filepath.Join(job.targetPath, fmt.Sprintf("%s_%s.pdf", job.posterName, tileSize.FileSuffix))
+}
+
+func generatedPosterBase(baseName string) (string, bool) {
+	for _, size := range tileSizes {
+		suffix := "_" + size.FileSuffix
+		if strings.HasSuffix(baseName, suffix) {
+			return strings.TrimSuffix(baseName, suffix), true
+		}
+	}
+
+	return "", false
+}
+
+// #endregion
 
 func normalizeOptions(options appOptions) appOptions {
 	normalizePath := func(path string) string {
@@ -81,16 +105,28 @@ func validatePaths(options appOptions) error {
 	return nil
 }
 
+func isSamePath(leftPath, rightPath string) bool {
+	return filepath.Clean(leftPath) == filepath.Clean(rightPath)
+}
+
 func collectPDFFiles(inputPath, outputPath string) ([]posterJob, error) {
+	inputPath = filepath.Clean(inputPath)
+	outputPath = filepath.Clean(outputPath)
 	jobs := make([]posterJob, 0, 32)
 	err := filepath.WalkDir(inputPath, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if d.IsDir() {
+			if !isSamePath(inputPath, outputPath) && isSamePath(path, outputPath) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if strings.ToLower(filepath.Ext(path)) != ".pdf" {
+			return nil
+		}
+		if shouldSkipGeneratedInput(path, inputPath, outputPath) {
 			return nil
 		}
 
@@ -111,18 +147,34 @@ func collectPDFFiles(inputPath, outputPath string) ([]posterJob, error) {
 	return jobs, err
 }
 
+func shouldSkipGeneratedInput(path, inputPath, outputPath string) bool {
+	if !isSamePath(inputPath, outputPath) {
+		return false
+	}
+
+	baseName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	originalBaseName, ok := generatedPosterBase(baseName)
+	if !ok {
+		return false
+	}
+
+	originalPath := filepath.Join(filepath.Dir(path), originalBaseName+".pdf")
+	_, err := os.Stat(originalPath)
+	return err == nil
+}
+
 func prependTitlePage(pdf *gopdf.GoPdf, titlePath string) error {
-	titleW, titleH, err := getFirstPageSize(titlePath)
+	titleGeometry, err := getFirstPageGeometry(titlePath)
 	if err != nil {
 		return err
 	}
 
 	opt := gopdf.PageOption{
-		PageSize: &gopdf.Rect{W: titleW, H: titleH},
+		PageSize: &gopdf.Rect{W: titleGeometry.visualWidthPt, H: titleGeometry.visualHeightPt},
 	}
 	pdf.AddPageWithOption(opt)
 	tplID := pdf.ImportPage(titlePath, 1, "/MediaBox")
-	pdf.UseImportedTemplate(tplID, 0, 0, titleW, titleH)
+	pdf.UseImportedTemplate(tplID, 0, 0, titleGeometry.visualWidthPt, titleGeometry.visualHeightPt)
 	return nil
 }
 
@@ -185,15 +237,15 @@ func processFile(
 	if options.Logo != "" {
 		logoWidthPt := mmToPt(options.LogoWidth)
 		logoAlpha := clampFloat64(options.LogoOpacity/100.0, 0, 1)
-		watermarkedPath := filepath.Join(job.targetPath, job.posterName+".pdf")
-		if err := applyWatermark(job.pdfFileName, options.Logo, logoWidthPt, logoAlpha, watermarkedPath); err != nil {
+		watermarkedPath := watermarkedPosterPath(job)
+		if err := applyWatermark(job.pdfFileName, options.Logo, logoWidthPt, logoAlpha, options.WatermarkStrategy, watermarkedPath); err != nil {
 			return err
 		}
 		posterSourcePath = watermarkedPath
 	}
 
 	glueMarginPt := mmToPt(options.GlueMargin)
-	outputPath := filepath.Join(job.targetPath, fmt.Sprintf("%s_%s.pdf", job.posterName, tileSize.FileSuffix))
+	outputPath := tiledPosterPath(job, tileSize)
 	return createTilesPDF(posterSourcePath, options.TitlePage, tileSize, glueMarginPt, options.GlueStrategy, outputPath, ctx, callbacks)
 }
 
@@ -201,9 +253,9 @@ func plannedOutputPaths(jobs []posterJob, options appOptions, tileSize TileSize)
 	paths := make([]string, 0, len(jobs)*2)
 	for _, job := range jobs {
 		if options.Logo != "" {
-			paths = append(paths, filepath.Join(job.targetPath, job.posterName+".pdf"))
+			paths = append(paths, watermarkedPosterPath(job))
 		}
-		paths = append(paths, filepath.Join(job.targetPath, fmt.Sprintf("%s_%s.pdf", job.posterName, tileSize.FileSuffix)))
+		paths = append(paths, tiledPosterPath(job, tileSize))
 	}
 	return paths
 }
